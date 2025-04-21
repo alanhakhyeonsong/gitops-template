@@ -1,0 +1,132 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ramos-backend-demo-data-pvc
+spec:
+  accessModes:
+  - ReadWriteMany
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: app-sc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ramos-backend-demo-log-pvc
+spec:
+  accessModes:
+  - ReadWriteMany
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: app-sc
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ramos-backend-demo-dp
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+    type: RollingUpdate
+  template:
+    spec:
+      imagePullSecrets:
+      - name: regcred
+      securityContext:
+        fsGroup: 1001
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+      - name: ramos-backend-demo-con
+        image: ramos-backend-demo
+        imagePullPolicy: Always
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          privileged: false
+          readOnlyRootFilesystem: true
+          runAsGroup: 1001
+          runAsNonRoot: true
+          runAsUser: 1001
+          seccompProfile:
+            type: RuntimeDefault
+        env:
+        - name: NODE_NAME
+          valueFrom: {fieldRef: {fieldPath: spec.nodeName}}
+        - name: NODE_IP
+          valueFrom: {fieldRef: {fieldPath: status.hostIP}}
+        - name: NAMESPACE
+          valueFrom: {fieldRef: {fieldPath: metadata.namespace}}
+        - name: POD_NAME
+          valueFrom: {fieldRef: {fieldPath: metadata.name}}
+        - name: POD_IP
+          valueFrom: {fieldRef: {fieldPath: status.podIP}}
+        - name: JAVA_OPTS_APPEND
+          value: "-Djava.io.tmpdir=/app/tmp -Dlogpath=/app/logs -Dhostname=$(POD_NAME)"
+        lifecycle:
+          preStop:
+            exec:
+              command: ["sh", "-c", "sleep 10"]
+        livenessProbe:
+          httpGet:
+            path: /ramos-backend-demo/actuator/health/liveness
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 3
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /ramos-backend-demo/actuator/health/readiness
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          timeoutSeconds: 3
+        resources:
+          limits:
+            cpu: 400m
+            ephemeral-storage: 1Gi
+            memory: 1200Mi
+          requests:
+            cpu: 200m
+            ephemeral-storage: 300Mi
+            memory: 800Mi
+        volumeMounts:
+        - mountPath: /app/data
+          name: data
+        - mountPath: /app/logs
+          name: log
+        - mountPath: /app/tmp
+          name: tmp
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: ramos-backend-demo-data-pvc
+      - name: log
+        persistentVolumeClaim:
+          claimName: ramos-backend-demo-log-pvc
+      - name: tmp
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ramos-backend-demo-svc
+spec:
+  ports:
+  - name: http
+    port: 8080
+    protocol: TCP
+    targetPort: 8080

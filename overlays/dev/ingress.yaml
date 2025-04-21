@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    nginx.ingress.kubernetes.io/affinity: cookie
+    nginx.ingress.kubernetes.io/session-cookie-hash: sha256
+    nginx.ingress.kubernetes.io/session-cookie-name: route
+  name: ramos-backend-demo-ing
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: dev-ramos-backend-demo.ramos.com
+    http:
+      paths:
+      - backend:
+          service:
+            name: ramos-backend-demo-svc
+            port:
+              name: http
+        path: /ramos-backend-demo
+        pathType: Prefix
+  tls:
+  - hosts:
+    - dev-ramos-backend-demo.ramos.com
+    secretName: secret-tls

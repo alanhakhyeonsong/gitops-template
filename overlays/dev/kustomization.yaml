@@ -1,0 +1,72 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- ../../base
+- ingress.yaml
+namespace: sample-dev
+commonLabels:
+  app: ramos-backend-demo
+images:
+- name: ramos-backend-demo
+  newName: harbor.ramos.com/sample-dev/sample/ramos-backend-demo
+  newTag: latest
+patches:
+- target:
+    kind: Deployment
+    name: ramos-backend-demo-dp
+  patch: |-
+    kind: Deployment
+    metadata:
+      name: ramos-backend-demo-dp
+    spec:
+      template:
+        spec:
+          # nodeSelector:
+          #   magnum.openstack.org/nodegroup: default-worker
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                    - common-dev-worker-node-1
+                    - common-dev-worker-node-2
+            podAntiAffinity:
+              preferredDuringSchedulingIgnoredDuringExecution:
+              - podAffinityTerm:
+                  labelSelector:
+                    matchLabels:
+                      app: ramos-backend-demo
+                  topologyKey: kubernetes.io/hostname
+                weight: 1
+          containers:
+          - name: ramos-backend-demo-con
+            env:
+            - name: JAVA_OPTS
+              value: "-Dfile.encoding=UTF-8 -Dspring.profiles.active=dev"    
+- target:
+    kind: PersistentVolumeClaim
+    name: ramos-backend-demo-data-pvc
+  patch: |-
+    kind: PersistentVolumeClaim
+    metadata:
+      name: ramos-backend-demo-data-pvc
+    spec:
+      resources:
+        requests:
+          storage: 1Gi
+      storageClassName: app-sc    
+- target:
+    kind: PersistentVolumeClaim
+    name: ramos-backend-demo-log-pvc
+  patch: |-
+    kind: PersistentVolumeClaim
+    metadata:
+      name: ramos-backend-demo-log-pvc
+    spec:
+      resources:
+        requests:
+          storage: 5Gi
+      storageClassName: app-sc    
